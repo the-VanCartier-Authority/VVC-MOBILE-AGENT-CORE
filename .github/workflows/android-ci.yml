@@ -1,0 +1,33 @@
+name: VVC Android CI (Cloud Build)
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: 1. Clonar repositorio central
+      uses: actions/checkout@v4
+
+    - name: 2. Configurar Entorno Java 17
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+        cache: 'gradle'
+
+    - name: 3. Otorgar permisos de ejecución a Gradle
+      run: chmod +x ./gradlew
+
+    - name: 4. Compilar APK de Producción (Release)
+      run: ./gradlew assembleDebug
+
+    - name: 5. Preservar y Subir Artefacto Compilado
+      uses: actions/upload-artifact@v4
+      with:
+        name: VVC-Mobile-Agent-Core-APK
+        path: app/build/outputs/apk/debug/app-debug.apk
+        retention-days: 7
