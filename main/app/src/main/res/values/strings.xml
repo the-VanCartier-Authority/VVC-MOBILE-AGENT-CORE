@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">VVC_MOBILE_AGENT_CORE</string>
+    <string name="header_logo_description">Logotipo de VVC Mobile Agent Core</string>
+    <string name="status_ready">Núcleo offline preparado</string>
+    <string name="status_loading">Inicializando modelos LiteRT locales</string>
+</resources>

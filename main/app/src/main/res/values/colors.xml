@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="vvc_black">#05070A</color>
+    <color name="vvc_panel">#101820</color>
+    <color name="vvc_cyan">#00E5FF</color>
+    <color name="vvc_thermal_red">#FF2A4F</color>
+    <color name="vvc_text_primary">#E6FBFF</color>
+    <color name="vvc_text_secondary">#8FDCE8</color>
+</resources>

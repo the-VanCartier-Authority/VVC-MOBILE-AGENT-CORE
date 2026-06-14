@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/vvc_black"
+    android:orientation="vertical"
+    android:padding="18dp">
+
+    <LinearLayout
+        android:id="@+id/headerContainer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/vvc_panel_background"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="16dp">
+
+        <FrameLayout
+            android:id="@+id/logoFrame"
+            android:layout_width="76dp"
+            android:layout_height="76dp"
+            android:layout_marginEnd="16dp"
+            android:background="@drawable/vvc_logo_frame"
+            android:foregroundGravity="center"
+            android:padding="8dp">
+
+            <ImageView
+                android:id="@+id/appLogoImageView"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:adjustViewBounds="true"
+                android:contentDescription="@string/header_logo_description"
+                android:scaleType="fitCenter"
+                android:src="@mipmap/ic_launcher" />
+        </FrameLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/titleTextView"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:letterSpacing="0.08"
+                android:text="VVC_MOBILE_AGENT_CORE"
+                android:textAllCaps="true"
+                android:textColor="@color/vvc_cyan"
+                android:textSize="19sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/subtitleTextView"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="EDGE GALLERY · LITERT · OFFLINE EXECUTIVE PANEL"
+                android:textColor="@color/vvc_text_secondary"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/statusTextView"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:background="@drawable/vvc_panel_background"
+        android:padding="14dp"
+        android:text="@string/status_loading"
+        android:textColor="@color/vvc_text_primary"
+        android:textSize="14sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/auditLogTextView"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="16dp"
+        android:layout_weight="1"
+        android:background="@drawable/vvc_panel_background"
+        android:lineSpacingExtra="4dp"
+        android:padding="14dp"
+        android:text="EDGE_GALLERY://LOCAL_ONLY\nAUDIO_SCRIBE: STANDBY\nASK_IMAGE: STANDBY\nMOBILE_ACTIONS: STANDBY\nHASH_GUARD: STANDBY\nANOMALY_NOTIFIER: STANDBY"
+        android:textColor="@color/vvc_text_secondary"
+        android:textSize="13sp" />
+
+    <TextView
+        android:id="@+id/securityFooterTextView"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:background="@drawable/vvc_panel_background"
+        android:gravity="center"
+        android:padding="10dp"
+        android:text="NO JS_EVAL · NO CHILD_PROCESS · NO JNI LIBRE · SHA-256 · LITERT OFFLINE"
+        android:textColor="@color/vvc_thermal_red"
+        android:textSize="11sp"
+        android:textStyle="bold" />
+</LinearLayout>
