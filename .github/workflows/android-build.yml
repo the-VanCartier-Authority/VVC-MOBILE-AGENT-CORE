@@ -1,1 +1,35 @@
+name: VVC Cloud Build
 
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 1. Clonar repositorio
+        uses: actions/checkout@v4
+
+      - name: 2. Configurar Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: 3. Otorgar permisos
+        run: chmod +x ./gradlew
+
+      - name: 4. Compilar APK
+        run: ./gradlew assembleDebug
+
+      - name: 5. Guardar APK Final
+        uses: actions/upload-artifact@v4
+        with:
+          name: VVC-APK-Definitivo
+          path: app/build/outputs/apk/debug/app-debug.apk
+          
