@@ -11,6 +11,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import org.tensorflow.lite.DataType
 import org.tensorflow.lite.Interpreter
 import org.tensorflow.lite.Tensor
@@ -37,9 +40,12 @@ class VvcEdgeModelManager(
     private val modelNames = ConcurrentHashMap<String, String>()
     private val verifiedHashes = ConcurrentHashMap<String, String>()
     private val rejectedModels = ConcurrentHashMap<String, String>()
+    private val modelLoadingMutex = Mutex()
+    private val availableModelPaths = ConcurrentHashMap<String, String>() // normalized -> asset path
+    private val isInitialized = ConcurrentHashMap<String, Boolean>() // Track which models are loaded
 
     val initialization: Deferred<Unit> = scope.async {
-        loadLocalModels()
+        scanAndCatalogModels()
     }
 
     suspend fun awaitReady() {
@@ -54,8 +60,8 @@ class VvcEdgeModelManager(
             return "AUDIO_SCRIBE_INPUT_NOT_FOUND"
         }
 
-        val modelKey = findModelKey(AUDIO_MODEL_MARKERS) ?: return "AUDIO_SCRIBE_MODEL_NOT_AVAILABLE"
-        val interpreter = interpreters[modelKey] ?: return "AUDIO_SCRIBE_INTERPRETER_NOT_AVAILABLE"
+        val modelKey = findAvailableModelKey(AUDIO_MODEL_MARKERS) ?: return "AUDIO_SCRIBE_MODEL_NOT_AVAILABLE"
+        val interpreter = ensureModelLoaded(modelKey) ?: return "AUDIO_SCRIBE_INTERPRETER_NOT_AVAILABLE"
         val signal = audioFile.readBytes().toFloatVector(MAX_AUDIO_SAMPLES)
         val output = runSingleInputFloatInference(interpreter, signal)
         return formatTopResult("AUDIO_SCRIBE_OFFLINE", output, "Audio Scribe")
@@ -66,8 +72,8 @@ class VvcEdgeModelManager(
             return "ASK_IMAGE_INIT_PENDING"
         }
 
-        val modelKey = findModelKey(IMAGE_MODEL_MARKERS) ?: return "ASK_IMAGE_MODEL_NOT_AVAILABLE"
-        val interpreter = interpreters[modelKey] ?: return "ASK_IMAGE_INTERPRETER_NOT_AVAILABLE"
+        val modelKey = findAvailableModelKey(IMAGE_MODEL_MARKERS) ?: return "ASK_IMAGE_MODEL_NOT_AVAILABLE"
+        val interpreter = ensureModelLoaded(modelKey) ?: return "ASK_IMAGE_INTERPRETER_NOT_AVAILABLE"
         val pixels = imageBitmap.toNormalizedFloatVector(MAX_IMAGE_VALUES)
         val output = runSingleInputFloatInference(interpreter, pixels)
         return formatTopResult("ASK_IMAGE_OFFLINE", output, "Ask Image")
@@ -78,8 +84,8 @@ class VvcEdgeModelManager(
             return ACTION_INIT_PENDING
         }
 
-        val modelKey = findModelKey(ACTION_MODEL_MARKERS) ?: return ACTION_MODEL_NOT_AVAILABLE
-        val interpreter = interpreters[modelKey] ?: return ACTION_INTERPRETER_NOT_AVAILABLE
+        val modelKey = findAvailableModelKey(ACTION_MODEL_MARKERS) ?: return ACTION_MODEL_NOT_AVAILABLE
+        val interpreter = ensureModelLoaded(modelKey) ?: return ACTION_INTERPRETER_NOT_AVAILABLE
         val features = patternData.encodeToByteArray().toFloatVector(MAX_PATTERN_VALUES)
         val output = runSingleInputFloatInference(interpreter, features)
         val topIndex = output.indices.maxByOrNull { output[it] } ?: ACTION_EMPTY_RESULT
@@ -120,20 +126,30 @@ class VvcEdgeModelManager(
         modelNames.clear()
         verifiedHashes.clear()
         rejectedModels.clear()
+        availableModelPaths.clear()
+        isInitialized.clear()
         scope.cancel()
     }
 
-    private fun loadLocalModels() {
+    /**
+     * Scan and catalog all available models without loading them into memory.
+     * This is fast and memory-efficient.
+     */
+    private fun scanAndCatalogModels() {
         val paths = listModelAssetPaths(modelDirectory)
         paths.forEach { assetPath ->
             val normalizedName = assetPath.lowercase(Locale.US)
             if (normalizedName.endsWith(".tflite") || normalizedName.endsWith(".lite") || normalizedName.endsWith(".litert")) {
-                loadVerifiedModel(assetPath, normalizedName)
+                // Verify but don't load yet
+                verifyModelIntegrity(assetPath, normalizedName)
             }
         }
     }
 
-    private fun loadVerifiedModel(assetPath: String, normalizedName: String) {
+    /**
+     * Verify model integrity without loading it into memory.
+     */
+    private fun verifyModelIntegrity(assetPath: String, normalizedName: String) {
         val expectedHash = VvcHashCalculator.readAssetSha256Sidecar(assetManager, "$assetPath.sha256")
         if (expectedHash.isNullOrBlank()) {
             rejectedModels[assetPath] = "SHA-256 lateral ausente"
@@ -154,13 +170,49 @@ class VvcEdgeModelManager(
             return
         }
 
-        val modelBuffer = loadMappedAsset(assetPath)
-        val options = Interpreter.Options().apply {
-            setNumThreads(DEFAULT_THREAD_COUNT)
-        }
-        interpreters[normalizedName] = Interpreter(modelBuffer, options)
+        // Model is verified, catalog it for lazy loading
+        availableModelPaths[normalizedName] = assetPath
         modelNames[normalizedName] = assetPath
         verifiedHashes[assetPath] = actualHash
+    }
+
+    /**
+     * Load a model into memory only when needed (lazy loading).
+     * Thread-safe: uses Mutex to prevent concurrent loading of the same model.
+     */
+    private suspend fun ensureModelLoaded(modelKey: String): Interpreter? = withContext(Dispatchers.Default) {
+        // Fast path: already loaded
+        interpreters[modelKey]?.let { return@withContext it }
+
+        // Slow path: load the model with mutex protection
+        modelLoadingMutex.withLock {
+            // Double-check after acquiring lock
+            interpreters[modelKey]?.let { return@withContext it }
+
+            val assetPath = availableModelPaths[modelKey] ?: return@withContext null
+            loadModelIntoMemory(modelKey, assetPath)
+            interpreters[modelKey]
+        }
+    }
+
+    /**
+     * Load a single model into memory.
+     */
+    private fun loadModelIntoMemory(normalizedName: String, assetPath: String) {
+        try {
+            val modelBuffer = loadMappedAsset(assetPath)
+            val options = Interpreter.Options().apply {
+                setNumThreads(DEFAULT_THREAD_COUNT)
+            }
+            interpreters[normalizedName] = Interpreter(modelBuffer, options)
+            isInitialized[normalizedName] = true
+        } catch (e: Exception) {
+            rejectedModels[assetPath] = "Error al cargar: ${e.message}"
+            notificationScheduler.scheduleModelAnomalyAlert(
+                title = "Error al cargar modelo VVC",
+                message = "No se pudo cargar $assetPath: ${e.message}"
+            )
+        }
     }
 
     private fun listModelAssetPaths(directory: String): List<String> {
@@ -185,8 +237,8 @@ class VvcEdgeModelManager(
         }
     }
 
-    private fun findModelKey(markers: Array<String>): String? {
-        return interpreters.keys.firstOrNull { key -> markers.any { marker -> key.contains(marker) } }
+    private fun findAvailableModelKey(markers: Array<String>): String? {
+        return availableModelPaths.keys.firstOrNull { key -> markers.any { marker -> key.contains(marker) } }
     }
 
     private fun runSingleInputFloatInference(interpreter: Interpreter, sourceValues: FloatArray): FloatArray {
