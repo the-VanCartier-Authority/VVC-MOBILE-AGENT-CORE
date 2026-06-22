@@ -4,4 +4,5 @@
     <string name="header_logo_description">Logotipo de VVC Mobile Agent Core</string>
     <string name="status_ready">Núcleo offline preparado</string>
     <string name="status_loading">Inicializando modelos LiteRT locales</string>
+    <string name="status_error">Error inicializando modelos LiteRT locales</string>
 </resources>
