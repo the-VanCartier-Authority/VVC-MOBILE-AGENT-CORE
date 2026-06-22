@@ -61,7 +61,11 @@ class VvcEdgeModelManager(
         }
 
         val modelKey = findAvailableModelKey(AUDIO_MODEL_MARKERS) ?: return "AUDIO_SCRIBE_MODEL_NOT_AVAILABLE"
-        val interpreter = ensureModelLoaded(modelKey) ?: return "AUDIO_SCRIBE_INTERPRETER_NOT_AVAILABLE"
+        val interpreter = interpreters[modelKey] ?: run {
+            loadModelSync(modelKey)
+            interpreters[modelKey]
+        } ?: return "AUDIO_SCRIBE_INTERPRETER_NOT_AVAILABLE"
+        
         val signal = audioFile.readBytes().toFloatVector(MAX_AUDIO_SAMPLES)
         val output = runSingleInputFloatInference(interpreter, signal)
         return formatTopResult("AUDIO_SCRIBE_OFFLINE", output, "Audio Scribe")
@@ -73,7 +77,11 @@ class VvcEdgeModelManager(
         }
 
         val modelKey = findAvailableModelKey(IMAGE_MODEL_MARKERS) ?: return "ASK_IMAGE_MODEL_NOT_AVAILABLE"
-        val interpreter = ensureModelLoaded(modelKey) ?: return "ASK_IMAGE_INTERPRETER_NOT_AVAILABLE"
+        val interpreter = interpreters[modelKey] ?: run {
+            loadModelSync(modelKey)
+            interpreters[modelKey]
+        } ?: return "ASK_IMAGE_INTERPRETER_NOT_AVAILABLE"
+        
         val pixels = imageBitmap.toNormalizedFloatVector(MAX_IMAGE_VALUES)
         val output = runSingleInputFloatInference(interpreter, pixels)
         return formatTopResult("ASK_IMAGE_OFFLINE", output, "Ask Image")
@@ -85,7 +93,11 @@ class VvcEdgeModelManager(
         }
 
         val modelKey = findAvailableModelKey(ACTION_MODEL_MARKERS) ?: return ACTION_MODEL_NOT_AVAILABLE
-        val interpreter = ensureModelLoaded(modelKey) ?: return ACTION_INTERPRETER_NOT_AVAILABLE
+        val interpreter = interpreters[modelKey] ?: run {
+            loadModelSync(modelKey)
+            interpreters[modelKey]
+        } ?: return ACTION_INTERPRETER_NOT_AVAILABLE
+        
         val features = patternData.encodeToByteArray().toFloatVector(MAX_PATTERN_VALUES)
         val output = runSingleInputFloatInference(interpreter, features)
         val topIndex = output.indices.maxByOrNull { output[it] } ?: ACTION_EMPTY_RESULT
@@ -177,22 +189,17 @@ class VvcEdgeModelManager(
     }
 
     /**
-     * Load a model into memory only when needed (lazy loading).
-     * Thread-safe: uses Mutex to prevent concurrent loading of the same model.
+     * Load a model into memory synchronously (blocking).
+     * Used from non-suspend contexts (processAudioScribe, processAskImage, etc.)
      */
-    private suspend fun ensureModelLoaded(modelKey: String): Interpreter? = withContext(Dispatchers.Default) {
+    private fun loadModelSync(modelKey: String) {
         // Fast path: already loaded
-        interpreters[modelKey]?.let { return@withContext it }
-
-        // Slow path: load the model with mutex protection
-        modelLoadingMutex.withLock {
-            // Double-check after acquiring lock
-            interpreters[modelKey]?.let { return@withContext it }
-
-            val assetPath = availableModelPaths[modelKey] ?: return@withContext null
-            loadModelIntoMemory(modelKey, assetPath)
-            interpreters[modelKey]
+        if (interpreters.containsKey(modelKey)) {
+            return
         }
+
+        val assetPath = availableModelPaths[modelKey] ?: return
+        loadModelIntoMemory(modelKey, assetPath)
     }
 
     /**
