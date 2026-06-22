@@ -52,7 +52,7 @@ class VvcEdgeModelManager(
         initialization.await()
     }
 
-    fun processAudioScribe(audioFile: File): String {
+    suspend fun processAudioScribe(audioFile: File): String {
         if (!initialization.isCompleted) {
             return "AUDIO_SCRIBE_INIT_PENDING"
         }
@@ -71,7 +71,7 @@ class VvcEdgeModelManager(
         return formatTopResult("AUDIO_SCRIBE_OFFLINE", output, "Audio Scribe")
     }
 
-    fun processAskImage(imageBitmap: Bitmap): String {
+    suspend fun processAskImage(imageBitmap: Bitmap): String {
         if (!initialization.isCompleted) {
             return "ASK_IMAGE_INIT_PENDING"
         }
@@ -87,7 +87,7 @@ class VvcEdgeModelManager(
         return formatTopResult("ASK_IMAGE_OFFLINE", output, "Ask Image")
     }
 
-    fun processMobileActions(patternData: String): Int {
+    suspend fun processMobileActions(patternData: String): Int {
         if (!initialization.isCompleted) {
             return ACTION_INIT_PENDING
         }
